@@ -1,0 +1,214 @@
+{
+  "name": "ez-luau-utility",
+  "displayName": "ez-luau-utility",
+  "description": "Bundle static relative Luau requires and manage DonutQuine scripts from the VS Code sidebar.",
+  "version": "0.3.1",
+  "publisher": "local-tools",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "luau",
+    "lua",
+    "bundle",
+    "require",
+    "scripting"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCommand:ezLuauUtility.compileActiveFile",
+    "onCommand:ezLuauUtility.remoteLogin",
+    "onCommand:ezLuauUtility.remoteLogout",
+    "onCommand:ezLuauUtility.remoteSetUserUuid",
+    "onCommand:ezLuauUtility.remoteDownloadScript",
+    "onCommand:ezLuauUtility.remoteUploadActiveFile",
+    "onCommand:ezLuauUtility.remoteRefreshScripts",
+    "onCommand:ezLuauUtility.remoteOpenScript",
+    "onCommand:ezLuauUtility.remoteStartBattle",
+    "onCommand:ezLuauUtility.remoteOverwriteScript",
+    "onView:ezLuauUtility.remoteAuth",
+    "onView:ezLuauUtility.remoteScripts"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ezLuauUtility",
+          "title": "ez-luau-utility",
+          "icon": "media/ez-luau-utility.svg"
+        }
+      ]
+    },
+    "views": {
+      "ezLuauUtility": [
+        {
+          "id": "ezLuauUtility.remoteAuth",
+          "name": "Authentication"
+        },
+        {
+          "id": "ezLuauUtility.remoteScripts",
+          "name": "Script Explorer"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "ezLuauUtility.compileActiveFile",
+        "title": "Compile Active File",
+        "category": "ez-luau-utility"
+      },
+      {
+        "command": "ezLuauUtility.remoteLogin",
+        "title": "Sign In to Scripting API",
+        "category": "ez-luau-utility"
+      },
+      {
+        "command": "ezLuauUtility.remoteLogout",
+        "title": "Sign Out of Scripting API",
+        "category": "ez-luau-utility"
+      },
+      {
+        "command": "ezLuauUtility.remoteSetUserUuid",
+        "title": "Set Scripting User UUID",
+        "category": "ez-luau-utility"
+      },
+      {
+        "command": "ezLuauUtility.remoteDownloadScript",
+        "title": "Download Script from Scripting API",
+        "category": "ez-luau-utility"
+      },
+      {
+        "command": "ezLuauUtility.remoteUploadActiveFile",
+        "title": "Create or Upload Current File…",
+        "category": "ez-luau-utility",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "ezLuauUtility.remoteRefreshScripts",
+        "title": "Refresh Remote Scripts",
+        "category": "ez-luau-utility",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ezLuauUtility.remoteOpenScript",
+        "title": "Download and Open Script",
+        "category": "ez-luau-utility",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "ezLuauUtility.remoteStartBattle",
+        "title": "Start Battle",
+        "category": "ez-luau-utility",
+        "icon": "$(play)"
+      },
+      {
+        "command": "ezLuauUtility.remoteOverwriteScript",
+        "title": "Overwrite with Current File",
+        "category": "ez-luau-utility",
+        "icon": "$(replace-all)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "ezLuauUtility.remoteStartBattle",
+          "when": "view == ezLuauUtility.remoteScripts",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ezLuauUtility.remoteRefreshScripts",
+          "when": "view == ezLuauUtility.remoteScripts",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ezLuauUtility.remoteUploadActiveFile",
+          "when": "view == ezLuauUtility.remoteScripts",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "ezLuauUtility.remoteStartBattle",
+          "when": "view == ezLuauUtility.remoteScripts && viewItem == remoteScript",
+          "group": "inline@1"
+        },
+        {
+          "command": "ezLuauUtility.remoteOverwriteScript",
+          "when": "view == ezLuauUtility.remoteScripts && viewItem == remoteScript",
+          "group": "inline@2"
+        },
+        {
+          "command": "ezLuauUtility.remoteStartBattle",
+          "when": "view == ezLuauUtility.remoteScripts && viewItem == remoteScript",
+          "group": "remote@1"
+        },
+        {
+          "command": "ezLuauUtility.remoteOverwriteScript",
+          "when": "view == ezLuauUtility.remoteScripts && viewItem == remoteScript",
+          "group": "remote@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "ezLuauUtility.remoteRefreshScripts",
+          "when": "false"
+        },
+        {
+          "command": "ezLuauUtility.remoteOpenScript",
+          "when": "false"
+        },
+        {
+          "command": "ezLuauUtility.remoteOverwriteScript",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "ez-luau-utility",
+      "properties": {
+        "ezLuauUtility.remote.baseUrl": {
+          "type": "string",
+          "default": "https://scripting.donutquine.dev",
+          "description": "Base URL for the remote scripting service."
+        },
+        "ezLuauUtility.remote.loginPath": {
+          "type": "string",
+          "default": "/api/login",
+          "description": "Login endpoint path. The default also falls back to /api/auth/login if /api/login returns 404."
+        },
+        "ezLuauUtility.remote.cookieName": {
+          "type": "string",
+          "default": "token",
+          "description": "Cookie name used when the login response returns a token instead of a Set-Cookie header."
+        },
+        "ezLuauUtility.adb.path": {
+          "type": "string",
+          "default": "adb",
+          "description": "ADB executable name or path used to launch script deeplinks on an authorized Android device."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "tsx --test test/compiler.test.ts test/output.test.ts test/policies.test.ts test/remoteApi.test.ts test/deeplink.test.ts test/adb.test.ts test/manifest.test.ts",
+    "build": "npm run check-types && node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "npm run check-types && node esbuild.mjs --production",
+    "package:vsix": "vsce package --out ez-luau-utility-0.3.1.vsix",
+    "vscode:prepublish": "npm run package"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/vscode": "1.85.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3"
+  }
+}
