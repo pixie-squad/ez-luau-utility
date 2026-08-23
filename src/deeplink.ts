@@ -1,9 +1,10 @@
 const BASE62_ALPHABET =
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const DISABLE_POISON_COMPLETELY = 1;
 
 const BATTLE_PARAMETERS = [
   0, 0, 0, 0, 0, 0, 100, 0,
-  0, 0, 0, 0, 13, 0, 4, 0,
+  0, 0, 0, 0, 13, DISABLE_POISON_COMPLETELY, 4, 0,
   1, 1, 1, 2, 1, 0, 0, -1,
   100, 0, 0, 1, 1, 1, 1, 20
 ] as const;

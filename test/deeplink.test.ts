@@ -28,7 +28,7 @@ test("constructs the documented NT Scripting deeplink", () => {
       `https://scripting.donutquine.dev/api/scripts/${SCRIPT_UUID}/content?token=test`,
     bp: [
       0, 0, 0, 0, 0, 0, 100, 0,
-      0, 0, 0, 0, 13, 0, 4, 0,
+      0, 0, 0, 0, 13, 1, 4, 0,
       1, 1, 1, 2, 1, 0, 0, -1,
       100, 0, 0, 1, 1, 1, 1, 20
     ]
