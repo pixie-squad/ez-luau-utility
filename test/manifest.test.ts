@@ -42,6 +42,8 @@ const REFRESH_COMMAND = "ezLuauUtility.remoteRefreshScripts";
 const UPLOAD_COMMAND = "ezLuauUtility.remoteUploadActiveFile";
 const OPEN_COMMAND = "ezLuauUtility.remoteOpenScript";
 const START_BATTLE_COMMAND = "ezLuauUtility.remoteStartBattle";
+const BATTLE_SETTINGS_COMMAND =
+  "ezLuauUtility.remoteConfigureBattleSettings";
 const OVERWRITE_COMMAND = "ezLuauUtility.remoteOverwriteScript";
 
 test("contributes the ez-luau-utility sidebar and its required actions", async () => {
@@ -78,6 +80,7 @@ test("contributes the ez-luau-utility sidebar and its required actions", async (
     UPLOAD_COMMAND,
     OPEN_COMMAND,
     START_BATTLE_COMMAND,
+    BATTLE_SETTINGS_COMMAND,
     OVERWRITE_COMMAND
   ]) {
     assert.equal(commandIds.has(command), true, `${command} must be contributed`);
@@ -87,6 +90,15 @@ test("contributes the ez-luau-utility sidebar and its required actions", async (
   assert.equal(
     titleCommands.some(
       (item) => item.command === REFRESH_COMMAND && item.when?.includes(SCRIPTS_VIEW_ID)
+    ),
+    true
+  );
+  assert.equal(
+    titleCommands.some(
+      (item) =>
+        item.command === BATTLE_SETTINGS_COMMAND &&
+        item.when?.includes(SCRIPTS_VIEW_ID) &&
+        !item.group?.startsWith("navigation")
     ),
     true
   );
@@ -131,6 +143,10 @@ test("contributes the ez-luau-utility sidebar and its required actions", async (
   }
   assert.equal(
     manifest.activationEvents.includes(`onCommand:${START_BATTLE_COMMAND}`),
+    true
+  );
+  assert.equal(
+    manifest.activationEvents.includes(`onCommand:${BATTLE_SETTINGS_COMMAND}`),
     true
   );
 });

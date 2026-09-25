@@ -59,6 +59,11 @@ test("logs in with username/password and sends a returned token as a cookie", as
       return jsonResponse({ token: "abc/+=", user_uuid: USER_UUID });
     }
 
+    if (url === `${BASE_URL}/api/users/me`) {
+      assert.equal(header(init, "Cookie"), "token=abc/+=");
+      return jsonResponse({ uuid: USER_UUID });
+    }
+
     assert.equal(url, `${BASE_URL}/api/users/${USER_UUID}/scripts`);
     assert.equal(header(init, "Cookie"), "token=abc/+=");
     return jsonResponse({ scripts: [scriptSummary()] });
@@ -75,7 +80,7 @@ test("logs in with username/password and sends a returned token as a cookie", as
     cookie: "token=abc/+="
   });
   assert.deepEqual(scripts, [scriptSummary()]);
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
 });
 
 test("falls back to the deployed login route and preserves Set-Cookie sessions", async () => {
@@ -150,6 +155,48 @@ test("re-authenticates once with saved credentials after an expired cookie", asy
   assert.equal(store.session?.cookie, "token=fresh-token");
 });
 
+test("checks the current user before listing scripts and refreshes an expired session", async () => {
+  const store = new MemoryRemoteStore();
+  store.credentials = { username: "alice", password: "secret" };
+  store.session = { baseUrl: BASE_URL, cookie: "token=expired" };
+  const calls: Array<{ url: string; cookie: string | undefined }> = [];
+
+  const fetch: RemoteFetch = async (input, init = {}) => {
+    const url = String(input);
+    const cookie = header(init, "Cookie");
+    calls.push({ url, cookie });
+
+    if (url === `${BASE_URL}/api/login`) {
+      return jsonResponse({ token: "fresh-token", user_uuid: USER_UUID });
+    }
+    if (url === `${BASE_URL}/api/users/me` && cookie === "token=expired") {
+      return new Response(null, { status: 401, statusText: "Unauthorized" });
+    }
+    if (url === `${BASE_URL}/api/users/me`) {
+      assert.equal(cookie, "token=fresh-token");
+      return jsonResponse({ user: { uuid: USER_UUID } });
+    }
+
+    assert.equal(url, `${BASE_URL}/api/users/${USER_UUID}/scripts`);
+    assert.equal(cookie, "token=fresh-token");
+    return jsonResponse({ scripts: [scriptSummary()] });
+  };
+  const api = makeApi(store, fetch, async () => {
+    throw new Error("The saved credentials should be used without prompting.");
+  });
+
+  assert.deepEqual(await api.listScripts(USER_UUID), [scriptSummary()]);
+  assert.deepEqual(calls, [
+    { url: `${BASE_URL}/api/users/me`, cookie: "token=expired" },
+    { url: `${BASE_URL}/api/login`, cookie: undefined },
+    { url: `${BASE_URL}/api/users/me`, cookie: "token=fresh-token" },
+    {
+      url: `${BASE_URL}/api/users/${USER_UUID}/scripts`,
+      cookie: "token=fresh-token"
+    }
+  ]);
+});
+
 test("uploads the exact content as JSON with the authenticated cookie", async () => {
   const store = new MemoryRemoteStore();
   store.session = { baseUrl: BASE_URL, cookie: "token=ready" };
@@ -218,7 +265,11 @@ test("rejects malformed content and script-list responses", async (t) => {
 
   await t.test("script list", async () => {
     const store = authenticatedStore();
-    const api = makeApi(store, async () => jsonResponse({ scripts: [{}] }));
+    const api = makeApi(store, async (input) =>
+      String(input) === `${BASE_URL}/api/users/me`
+        ? jsonResponse({ uuid: USER_UUID })
+        : jsonResponse({ scripts: [{}] })
+    );
     await assert.rejects(
       api.listScripts(USER_UUID),
       (error: unknown) =>

@@ -3,6 +3,7 @@ import path from "node:path";
 import * as vscode from "vscode";
 
 import { BundleError, compileBundle } from "./compiler";
+import { resolveDarkluaPath } from "./darklua";
 import { VscodeFileHost } from "./fileHost";
 import {
   isGeneratedBundlePath,
@@ -15,6 +16,7 @@ import { RemoteSidebar } from "./sidebar";
 
 const COMMAND_ID = "ezLuauUtility.compileActiveFile";
 const DIAGNOSTIC_SOURCE = "ez-luau-utility";
+const DARKLUA_CONFIGURATION_SECTION = "ezLuauUtility.darklua";
 
 export function activate(context: vscode.ExtensionContext): void {
   const diagnostics = vscode.languages.createDiagnosticCollection("ez-luau-utility");
@@ -27,7 +29,7 @@ export function activate(context: vscode.ExtensionContext): void {
     sidebar,
     ...remote.registerCommands(),
     vscode.commands.registerCommand(COMMAND_ID, () =>
-      compileActiveFile(diagnostics, remote)
+      compileActiveFile(context, diagnostics, remote)
     ),
     vscode.workspace.onDidChangeTextDocument((event) => {
       diagnostics.delete(event.document.uri);
@@ -38,6 +40,7 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {}
 
 async function compileActiveFile(
+  context: vscode.ExtensionContext,
   diagnostics: vscode.DiagnosticCollection,
   remote: RemoteController
 ): Promise<void> {
@@ -119,12 +122,18 @@ async function compileActiveFile(
   const host = new VscodeFileHost(workspaceFolder.uri.fsPath);
 
   try {
-    const result = await compileBundle(entryPath, host);
+    const result = await compileBundle(entryPath, host, {
+      darkluaPath: resolveDarkluaPath(
+        context.extensionPath,
+        vscode.workspace
+          .getConfiguration(DARKLUA_CONFIGURATION_SECTION)
+          .get<string>("path", "")
+      )
+    });
     await vscode.workspace.fs.writeFile(outputUri, new TextEncoder().encode(result.code));
 
-    const moduleLabel = result.dependencies.length === 1 ? "module" : "modules";
     const choice = await vscode.window.showInformationMessage(
-      `Compiled ${result.dependencies.length} ${moduleLabel} to ${path.basename(outputPath)}.`,
+      `Bundled ${path.basename(entryPath)} with darklua to ${path.basename(outputPath)}.`,
       "Open Bundle",
       "Upload Bundle"
     );

@@ -2,7 +2,7 @@
   "name": "ez-luau-utility",
   "displayName": "ez-luau-utility",
   "description": "Bundle static relative Luau requires and manage DonutQuine scripts from the VS Code sidebar.",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "publisher": "local-tools",
   "license": "UNLICENSED",
   "private": true,
@@ -30,6 +30,7 @@
     "onCommand:ezLuauUtility.remoteRefreshScripts",
     "onCommand:ezLuauUtility.remoteOpenScript",
     "onCommand:ezLuauUtility.remoteStartBattle",
+    "onCommand:ezLuauUtility.remoteConfigureBattleSettings",
     "onCommand:ezLuauUtility.remoteOverwriteScript",
     "onView:ezLuauUtility.remoteAuth",
     "onView:ezLuauUtility.remoteScripts"
@@ -107,6 +108,12 @@
         "icon": "$(play)"
       },
       {
+        "command": "ezLuauUtility.remoteConfigureBattleSettings",
+        "title": "Configure Battle Settings",
+        "category": "ez-luau-utility",
+        "icon": "$(settings-gear)"
+      },
+      {
         "command": "ezLuauUtility.remoteOverwriteScript",
         "title": "Overwrite with Current File",
         "category": "ez-luau-utility",
@@ -129,6 +136,11 @@
           "command": "ezLuauUtility.remoteUploadActiveFile",
           "when": "view == ezLuauUtility.remoteScripts",
           "group": "navigation@3"
+        },
+        {
+          "command": "ezLuauUtility.remoteConfigureBattleSettings",
+          "when": "view == ezLuauUtility.remoteScripts",
+          "group": "settings@1"
         }
       ],
       "view/item/context": [
@@ -190,13 +202,18 @@
           "type": "string",
           "default": "adb",
           "description": "ADB executable name or path used to launch script deeplinks on an authorized Android device."
+        },
+        "ezLuauUtility.darklua.path": {
+          "type": "string",
+          "default": "",
+          "description": "Optional darklua executable override. Leave empty to use the executable bundled with the extension."
         }
       }
     }
   },
   "scripts": {
     "check-types": "tsc --noEmit",
-    "test": "tsx --test test/compiler.test.ts test/output.test.ts test/policies.test.ts test/remoteApi.test.ts test/deeplink.test.ts test/adb.test.ts test/manifest.test.ts",
+    "test": "tsx --test test/compiler.test.ts test/darklua.test.ts test/battleSettings.test.ts test/output.test.ts test/policies.test.ts test/remoteApi.test.ts test/deeplink.test.ts test/adb.test.ts test/manifest.test.ts",
     "build": "npm run check-types && node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
     "package": "npm run check-types && node esbuild.mjs --production",

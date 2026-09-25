@@ -6,6 +6,11 @@ import * as vscode from "vscode";
 import type { BundleHost } from "./compiler";
 import { preferBufferedText } from "./policies";
 
+const DARKLUA_INPUT_GLOB =
+  "**/*.{lua,luau,json,json5,yaml,yml,toml,txt,luaurc}";
+const DARKLUA_INPUT_EXCLUDE =
+  "**/{.git,node_modules,dist,build,out}/**";
+
 export class VscodeFileHost implements BundleHost {
   readonly workspaceRoot: string;
 
@@ -22,17 +27,35 @@ export class VscodeFileHost implements BundleHost {
     }
   }
 
-  async exists(filePath: string): Promise<boolean> {
-    if ((await this.findOpenDocument(filePath)) !== undefined) {
-      return true;
+  async listFiles(): Promise<readonly string[]> {
+    const files = new Map<string, string>();
+    const pattern = new vscode.RelativePattern(
+      vscode.Uri.file(this.workspaceRoot),
+      DARKLUA_INPUT_GLOB
+    );
+    for (const uri of await vscode.workspace.findFiles(
+      pattern,
+      DARKLUA_INPUT_EXCLUDE
+    )) {
+      files.set(pathKey(await this.canonicalize(uri.fsPath)), uri.fsPath);
     }
 
-    try {
-      const stat = await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
-      return (stat.type & vscode.FileType.File) !== 0;
-    } catch {
-      return false;
+    for (const document of vscode.workspace.textDocuments) {
+      if (
+        document.uri.scheme === "file" &&
+        isWithin(this.workspaceRoot, document.uri.fsPath) &&
+        /\.(?:lua|luau|json|json5|ya?ml|toml|txt|luaurc)$/i.test(
+          document.uri.fsPath
+        )
+      ) {
+        files.set(
+          pathKey(await this.canonicalize(document.uri.fsPath)),
+          document.uri.fsPath
+        );
+      }
     }
+
+    return [...files.values()];
   }
 
   async readText(filePath: string): Promise<string> {
@@ -68,4 +91,12 @@ export class VscodeFileHost implements BundleHost {
 function pathKey(filePath: string): string {
   const normalized = path.normalize(filePath);
   return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+function isWithin(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return (
+    relative === "" ||
+    (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+  );
 }

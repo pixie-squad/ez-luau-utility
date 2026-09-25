@@ -1,17 +1,21 @@
+import {
+  createBattleSettingsPayload,
+  defaultBattleSettings,
+  type BattleSettingsPayload
+} from "./battleSettings";
+
 const BASE62_ALPHABET =
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-const BATTLE_PARAMETERS = [
-  0, 0, 0, 0, 0, 0, 100, 0,
-  0, 0, 0, 0, 13, 0, 4, 0,
-  1, 1, 1, 2, 1, 0, 0, -1,
-  100, 0, 0, 1, 1, 1, 1, 20
-] as const;
+const DEFAULT_BATTLE_SETTINGS = createBattleSettingsPayload(
+  defaultBattleSettings()
+);
 
 export function createScriptingDeeplink(
   scriptUuid: string,
   shareToken: string,
-  remoteBaseUrl: string
+  remoteBaseUrl: string,
+  battleSettings: BattleSettingsPayload = DEFAULT_BATTLE_SETTINGS
 ): string {
   if (scriptUuid.length === 0) {
     throw new Error("A script UUID is required to create a deeplink.");
@@ -26,7 +30,8 @@ export function createScriptingDeeplink(
     script:
       `${baseUrl}/api/scripts/${encodeURIComponent(scriptUuid)}/content?token=` +
       encodeURIComponent(shareToken),
-    bp: BATTLE_PARAMETERS
+    bp: [...battleSettings.bp],
+    bc: [...battleSettings.bc]
   };
   const payload = encodeBase62(
     new TextEncoder().encode(JSON.stringify(config))

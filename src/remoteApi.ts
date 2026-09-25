@@ -186,7 +186,22 @@ export class RemoteApi {
     ]);
   }
 
+  async getAuthenticatedUser(): Promise<LoginResult> {
+    const path = "/api/users/me";
+    const response = await this.authenticatedRequest(path, { method: "GET" });
+    const decoded = await decodeResponse(response);
+    const userUuid = extractUserUuid(decoded.json);
+    if (userUuid === undefined) {
+      throw new RemoteApiError(
+        `The response from ${path} did not contain an authenticated user UUID.`,
+        { endpoint: path }
+      );
+    }
+    return { userUuid };
+  }
+
   async listScripts(userUuid: string): Promise<readonly RemoteScriptSummary[]> {
+    await this.getAuthenticatedUser();
     const path = `/api/users/${encodeURIComponent(userUuid)}/scripts`;
     const response = await this.authenticatedRequest(path, { method: "GET" });
     const decoded = await decodeResponse(response);

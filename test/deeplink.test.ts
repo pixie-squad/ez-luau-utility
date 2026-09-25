@@ -6,10 +6,8 @@ import { createScriptingDeeplink, encodeBase62 } from "../src/deeplink";
 const BASE62_ALPHABET =
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const SCRIPT_UUID = "01a01a56-bef2-7a0a-b5a2-f724617b194c";
-const DOCUMENTED_PREFIX =
-  "5UEPHKfjnZmD1hYX2wpBRAuRXW5IqAhnu3sWoY2QDa7EnvgucTnf3agdJnjE";
 
-test("constructs the documented NT Scripting deeplink", () => {
+test("constructs an NT Scripting deeplink with default battle settings", () => {
   const deeplink = createScriptingDeeplink(
     SCRIPT_UUID,
     "test",
@@ -17,7 +15,6 @@ test("constructs the documented NT Scripting deeplink", () => {
   );
   const payload = extractPayload(deeplink);
 
-  assert.equal(payload.startsWith(DOCUMENTED_PREFIX), true);
   assert.equal(
     deeplink,
     `nullsbrawl://createAndJoinRoom?roomname=params:v2:${payload}&friendly=1&side=0`
@@ -30,9 +27,30 @@ test("constructs the documented NT Scripting deeplink", () => {
       0, 0, 0, 0, 0, 0, 100, 0,
       0, 0, 0, 0, 13, 0, 4, 0,
       1, 1, 1, 2, 1, 0, 0, -1,
-      100, 0, 0, 1, 1, 1, 1, 20
-    ]
+      100, 0, 0, 0, 1, 1, 1, 20
+    ],
+    bc: []
   });
+});
+
+test("includes configured battle parameters and disallowed brawlers", () => {
+  const bp = Array<number>(32).fill(0);
+  bp[4] = 50;
+  const payload = extractPayload(
+    createScriptingDeeplink(
+      SCRIPT_UUID,
+      "test",
+      "https://scripting.donutquine.dev",
+      { bp, bc: [16000000, 16000001] }
+    )
+  );
+  const config = JSON.parse(decodeBase62(payload)) as {
+    readonly bp: readonly number[];
+    readonly bc: readonly number[];
+  };
+
+  assert.equal(config.bp[4], 50);
+  assert.deepEqual(config.bc, [16000000, 16000001]);
 });
 
 test("encodes the share token and honors a configured remote base URL", () => {

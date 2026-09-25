@@ -3,7 +3,23 @@ import path from "node:path";
 import * as vscode from "vscode";
 
 import { AdbLaunchError, openDeeplinkWithAdb } from "./adb";
+import {
+  BATTLE_SETTING_GROUPS,
+  BATTLE_SETTINGS,
+  battleSettingValue,
+  battleSettingsChangeCount,
+  createBattleSettingsPayload,
+  defaultBattleSettings,
+  formatBattleSettingValue,
+  normalizeBattleSettings,
+  updateBattleSetting,
+  updateDisabledBrawlerIds,
+  type BattleSetting,
+  type BattleSettingGroupId,
+  type BattleSettingsState
+} from "./battleSettings";
 import { BundleError, compileBundle } from "./compiler";
+import { resolveDarkluaPath } from "./darklua";
 import { createScriptingDeeplink } from "./deeplink";
 import { VscodeFileHost } from "./fileHost";
 import {
@@ -35,12 +51,16 @@ export const REMOTE_LOGOUT_COMMAND = "ezLuauUtility.remoteLogout";
 export const REMOTE_SET_USER_COMMAND = "ezLuauUtility.remoteSetUserUuid";
 export const REMOTE_DOWNLOAD_COMMAND = "ezLuauUtility.remoteDownloadScript";
 export const REMOTE_UPLOAD_COMMAND = "ezLuauUtility.remoteUploadActiveFile";
+export const REMOTE_BATTLE_SETTINGS_COMMAND =
+  "ezLuauUtility.remoteConfigureBattleSettings";
 
 const CONFIGURATION_SECTION = "ezLuauUtility.remote";
 const ADB_CONFIGURATION_SECTION = "ezLuauUtility.adb";
+const DARKLUA_CONFIGURATION_SECTION = "ezLuauUtility.darklua";
 const CREDENTIALS_SECRET_KEY = "ezLuauUtility.remote.credentials";
 const SESSION_SECRET_KEY = "ezLuauUtility.remote.session";
 const USER_UUID_STATE_KEY = "ezLuauUtility.remote.userUuid";
+const BATTLE_SETTINGS_STATE_KEY = "ezLuauUtility.remote.battleSettings";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -54,6 +74,19 @@ type UploadTarget =
 
 interface UploadTargetQuickPickItem extends vscode.QuickPickItem {
   readonly target: UploadTarget;
+}
+
+type BattleSettingsAction =
+  | { readonly kind: "group"; readonly group: BattleSettingGroupId }
+  | { readonly kind: "brawlers" }
+  | { readonly kind: "reset" };
+
+interface BattleSettingsQuickPickItem extends vscode.QuickPickItem {
+  readonly action: BattleSettingsAction;
+}
+
+interface BattleSettingQuickPickItem extends vscode.QuickPickItem {
+  readonly setting?: BattleSetting;
 }
 
 export interface RemoteAccountState {
@@ -107,6 +140,9 @@ export class RemoteController implements vscode.Disposable {
       ),
       vscode.commands.registerCommand(REMOTE_UPLOAD_COMMAND, () =>
         this.runRemote(() => this.uploadActiveFile())
+      ),
+      vscode.commands.registerCommand(REMOTE_BATTLE_SETTINGS_COMMAND, () =>
+        this.configureBattleSettings()
       )
     ];
   }
@@ -188,7 +224,8 @@ export class RemoteController implements vscode.Disposable {
       return createScriptingDeeplink(
         selectedScript.uuid,
         shareToken,
-        baseUrl
+        baseUrl,
+        createBattleSettingsPayload(this.loadBattleSettings())
       );
     });
     if (deeplink === undefined) {
@@ -474,7 +511,15 @@ export class RemoteController implements vscode.Disposable {
           title: `Bundling ${sourceLabel}…`,
           cancellable: false
         },
-        () => compileBundle(entry.entryPath, host)
+        () =>
+          compileBundle(entry.entryPath, host, {
+            darkluaPath: resolveDarkluaPath(
+              this.context.extensionPath,
+              vscode.workspace
+                .getConfiguration(DARKLUA_CONFIGURATION_SECTION)
+                .get<string>("path", "")
+            )
+          })
       );
       return {
         content: result.code,
@@ -669,6 +714,203 @@ export class RemoteController implements vscode.Disposable {
       ignoreFocusOut: true
     });
     return selected?.target;
+  }
+
+  private loadBattleSettings(): BattleSettingsState {
+    return normalizeBattleSettings(
+      this.context.globalState.get<unknown>(BATTLE_SETTINGS_STATE_KEY)
+    );
+  }
+
+  private async saveBattleSettings(state: BattleSettingsState): Promise<void> {
+    await this.context.globalState.update(BATTLE_SETTINGS_STATE_KEY, state);
+  }
+
+  private async configureBattleSettings(): Promise<void> {
+    let state = this.loadBattleSettings();
+
+    while (true) {
+      const items: BattleSettingsQuickPickItem[] = BATTLE_SETTING_GROUPS.map(
+        (group) => {
+          const settings = BATTLE_SETTINGS.filter(
+            (setting) => setting.group === group.id
+          );
+          const changed = settings.filter(
+            (setting) => battleSettingValue(state, setting) !== setting.defaultValue
+          ).length;
+          return {
+            label: group.label,
+            description: changed === 0 ? "defaults" : `${changed} changed`,
+            action: { kind: "group", group: group.id }
+          };
+        }
+      );
+
+      items.push({
+        label: "Disallowed brawler IDs",
+        description:
+          state.disabledBrawlerIds.length === 0
+            ? "none"
+            : `${state.disabledBrawlerIds.length} blocked`,
+        detail: "Advanced: comma-separated numeric brawler IDs.",
+        action: { kind: "brawlers" }
+      });
+
+      if (battleSettingsChangeCount(state) > 0) {
+        items.push({
+          label: "$(discard) Reset all battle settings",
+          description: `${battleSettingsChangeCount(state)} changed`,
+          action: { kind: "reset" }
+        });
+      }
+
+      const selected = await vscode.window.showQuickPick(items, {
+        title: "Battle Settings",
+        placeHolder: "Choose a compact settings group to edit",
+        ignoreFocusOut: true
+      });
+      if (selected === undefined) {
+        return;
+      }
+
+      if (selected.action.kind === "reset") {
+        state = defaultBattleSettings();
+        await this.saveBattleSettings(state);
+        continue;
+      }
+
+      if (selected.action.kind === "brawlers") {
+        const updated = await this.editDisabledBrawlerIds(state);
+        if (updated !== state) {
+          state = updated;
+          await this.saveBattleSettings(state);
+        }
+        continue;
+      }
+
+      state = await this.configureBattleSettingsGroup(
+        state,
+        selected.action.group
+      );
+    }
+  }
+
+  private async configureBattleSettingsGroup(
+    initialState: BattleSettingsState,
+    group: BattleSettingGroupId
+  ): Promise<BattleSettingsState> {
+    let state = initialState;
+    const groupLabel =
+      BATTLE_SETTING_GROUPS.find((candidate) => candidate.id === group)?.label ??
+      "Battle Settings";
+
+    while (true) {
+      const items: BattleSettingQuickPickItem[] = [
+        { label: "$(arrow-left) Back" },
+        ...BATTLE_SETTINGS.filter((setting) => setting.group === group).map(
+          (setting) => ({
+            label: setting.label,
+            description: formatBattleSettingValue(state, setting),
+            detail:
+              setting.description ??
+              (setting.kind === "number"
+                ? `Range ${setting.min} to ${setting.max}; default ${setting.defaultValue}${setting.suffix ?? ""}.`
+                : `Default: ${setting.defaultValue === setting.trueValue ? "Enabled" : "Disabled"}.`),
+            setting
+          })
+        )
+      ];
+
+      const selected = await vscode.window.showQuickPick(items, {
+        title: `Battle Settings · ${groupLabel}`,
+        placeHolder: "Choose a setting",
+        ignoreFocusOut: true
+      });
+      if (selected?.setting === undefined) {
+        return state;
+      }
+
+      const updated = await this.editBattleSetting(state, selected.setting);
+      if (updated !== state) {
+        state = updated;
+        await this.saveBattleSettings(state);
+      }
+    }
+  }
+
+  private async editBattleSetting(
+    state: BattleSettingsState,
+    setting: BattleSetting
+  ): Promise<BattleSettingsState> {
+    const current = battleSettingValue(state, setting);
+    if (setting.kind === "boolean") {
+      const selected = await vscode.window.showQuickPick(
+        [
+          {
+            label: "Enabled",
+            description: current === setting.trueValue ? "current" : undefined,
+            value: setting.trueValue
+          },
+          {
+            label: "Disabled",
+            description: current === setting.falseValue ? "current" : undefined,
+            value: setting.falseValue
+          }
+        ],
+        {
+          title: setting.label,
+          placeHolder: "Choose a value",
+          ignoreFocusOut: true
+        }
+      );
+      return selected === undefined
+        ? state
+        : updateBattleSetting(state, setting, selected.value);
+    }
+
+    const entered = await vscode.window.showInputBox({
+      title: setting.label,
+      prompt: `Enter an integer from ${setting.min} to ${setting.max}`,
+      value: String(current),
+      ignoreFocusOut: true,
+      validateInput: (value) => {
+        const parsed = Number(value);
+        if (!Number.isInteger(parsed)) {
+          return "Enter an integer.";
+        }
+        if (parsed < setting.min || parsed > setting.max) {
+          return `Enter a value from ${setting.min} to ${setting.max}.`;
+        }
+        return undefined;
+      }
+    });
+    if (entered === undefined) {
+      return state;
+    }
+    return updateBattleSetting(state, setting, Number(entered));
+  }
+
+  private async editDisabledBrawlerIds(
+    state: BattleSettingsState
+  ): Promise<BattleSettingsState> {
+    const entered = await vscode.window.showInputBox({
+      title: "Disallowed brawler IDs",
+      prompt: "Enter comma-separated numeric IDs, or leave empty to allow all",
+      value: state.disabledBrawlerIds.join(", "),
+      ignoreFocusOut: true,
+      validateInput: (value) => {
+        if (value.trim().length === 0) {
+          return undefined;
+        }
+        return parseBrawlerIds(value) === undefined
+          ? "Use positive integer IDs separated by commas."
+          : undefined;
+      }
+    });
+    if (entered === undefined) {
+      return state;
+    }
+    return updateDisabledBrawlerIds(state, parseBrawlerIds(entered) ?? []);
   }
 
   private async ensureUserUuid(): Promise<string> {
@@ -878,6 +1120,18 @@ function suggestedScriptName(sourceLabel: string): string {
   return sourceLabel
     .replace(/\.bundle\.luau$/i, "")
     .replace(/\.(?:lua|luau)$/i, "");
+}
+
+function parseBrawlerIds(value: string): readonly number[] | undefined {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return [];
+  }
+
+  const ids = trimmed.split(",").map((item) => Number(item.trim()));
+  return ids.every((id) => Number.isSafeInteger(id) && id > 0)
+    ? ids
+    : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
